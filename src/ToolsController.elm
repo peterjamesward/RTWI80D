@@ -5,13 +5,7 @@ import Element exposing (..)
 import Element.Background as Background exposing (color)
 import Element.Border as Border exposing (roundEach)
 import Element.Font as Font
-import Element.Input as Input
-import FeatherIcons
 import FlatColors.AussiePalette
-import FlatColors.SwedishPalette
-import Html.Attributes exposing (style)
-import Html.Events.Extra.Mouse as Mouse
-import List.Extra
 import TrackInfoBox
 import TrackLoaded exposing (TrackLoaded)
 import ViewPureStyles exposing (contrastingColour, neatToolsBorder, useIcon)
@@ -87,18 +81,6 @@ trackInfoBox =
     }
 
 
-nextToolState : ToolState -> ToolState
-nextToolState state =
-    case state of
-        Expanded ->
-            Contracted
-
-        Contracted ->
-            Expanded
-
-        Disabled ->
-            Disabled
-
 
 refreshOpenTools :
     Maybe TrackLoaded
@@ -147,6 +129,19 @@ update toolMsg isTrack msgWrapper options =
 
 --View stuff
 
+toolsForDock :
+    ToolDock
+    -> (ToolMsg -> msg)
+    -> Maybe TrackLoaded
+    -> Options
+    -> Element msg
+toolsForDock dock msgWrapper isTrack options =
+    column [] <|
+        (options.tools
+            |> List.filter (\t -> t.dock == dock)
+            |> List.map (viewTool msgWrapper isTrack options)
+        )
+
 
 viewTool :
     (ToolMsg -> msg)
@@ -169,10 +164,8 @@ viewTool msgWrapper isTrack options toolEntry =
             , Background.color toolEntry.tabColour
             , Font.color toolEntry.textColour
             ]
-            [ el [ centerX ]
-                <| text toolEntry.label
-
-
+            [ el [ centerX ] <|
+                text toolEntry.label
             ]
         , if toolEntry.state == Expanded then
             viewToolByType msgWrapper toolEntry isTrack options
@@ -180,6 +173,7 @@ viewTool msgWrapper isTrack options toolEntry =
           else
             none
         ]
+
 
 viewToolByType :
     (ToolMsg -> msg)

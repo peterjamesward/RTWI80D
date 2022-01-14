@@ -26,7 +26,7 @@ import Quantity exposing (Quantity)
 import Scene3d exposing (Entity)
 import Task
 import Time
-import ToolsController exposing (ToolEntry)
+import ToolsController exposing (ToolDock(..), ToolEntry, toolsForDock, trackInfoBox, viewTool)
 import TrackLoaded exposing (TrackLoaded)
 import ViewContext exposing (ViewContext(..), ViewMode(..))
 import ViewMap exposing (MapContext)
@@ -303,26 +303,12 @@ view model =
                 :: commonLayoutStyles
             )
           <|
-            column [ width fill, height fill ]
+            column [ width fill ]
                 [ topLoadingBar model
-                , html <|
-                    div
-                        [ style "width" "100%"
-                        , style "height" "100%"
-                        ]
-                        [ viewPaneArea model
-                        ]
+                , contentArea model
                 ]
         ]
     }
-
-
-viewPaneArea : Model -> Html Msg
-viewPaneArea model =
-    layoutWith { options = [ noStaticStyleSheet ] }
-        commonLayoutStyles
-    <|
-        contentArea model
 
 
 topLoadingBar model =
@@ -374,27 +360,23 @@ contentArea model =
                 }
     in
     -- NOTE that the Map DIV must be constructed once only, or the map gets upset.
-    column
-        [ width <| Element.px <| Pixels.inPixels w
-        , height <| Element.px <| Pixels.inPixels h
-        , alignTop
-
-        --, padding 10
-        , centerX
-        ]
-        [ column
-            [ width fill
+    row
+        [ centerX, width fill ]
+        [ toolsForDock DockUpperLeft ToolsMsg model.track model.toolOptions
+        , column
+            [ width <| Element.px <| Pixels.inPixels w
+            , height <| Element.px <| Pixels.inPixels h
             , alignTop
             , centerX
             ]
             [ ViewMap.view model MapPortsMessage
-            ]
-        , case model.track of
-            Just track ->
-                el [ centerX ] <| slider <| 1 + skipCount track.trackTree
+            , case model.track of
+                Just track ->
+                    el [ centerX ] <| slider <| 1 + skipCount track.trackTree
 
-            Nothing ->
-                none
+                Nothing ->
+                    none
+            ]
         ]
 
 
@@ -427,7 +409,6 @@ performActionsOnModel actions model =
                             { track | currentPosition = position }
                     in
                     { mdl | track = Just newTrack }
-
 
                 _ ->
                     mdl

@@ -114,7 +114,7 @@ renderMapJson track =
                 , ( "coordinates", E.list identity coordinates )
                 ]
 
-        coordinates = []
+        coordinates = renderTree 10 track.trackTree []
     in
     E.object
         [ ( "type", E.string "Feature" )
