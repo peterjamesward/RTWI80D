@@ -12,11 +12,6 @@ trackInfoList : List ( Element msg, PeteTree -> Element msg )
 trackInfoList =
     [ ( text "Points", asRecord >> .skipCount >> (+) 1 >> String.fromInt >> text )
     , ( text "Length", asRecord >> .trueLength >> showLongMeasure False >> text )
-    , ( text "Ascent", asRecord >> .altitudeGained >> showLongMeasure False >> text )
-    , ( text "Descent", asRecord >> .altitudeLost >> showLongMeasure False >> text )
-    , ( text "Climbing", asRecord >> .distanceClimbing >> showLongMeasure False >> text )
-    , ( text "Descending", asRecord >> .distanceDescending >> showLongMeasure False >> text )
-    , ( text "Steepest", asRecord >> .steepestClimb >> showDecimal2 >> text )
     ]
 
 

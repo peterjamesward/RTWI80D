@@ -30,12 +30,8 @@ type alias RoadSection =
     -- Bounding box and Sphere needed for culling in nearness tests.
     -- Keeping track of longitude tricky because of IDL.
     { sourceData : ( GPXSource, GPXSource )
-    , startPoint : EarthPoint
-    , endPoint : EarthPoint
 
     -- For rapid location of points using non-map views...
-    , boundingBox : BoundingBox3d Meters LocalCoords
-    , sphere : Sphere3d Meters LocalCoords
     , trueLength : Length.Length
     , skipCount : Int
 
@@ -43,21 +39,6 @@ type alias RoadSection =
     , medianLongitude : Direction2d LocalCoords
     , eastwardExtent : Angle
     , westwardExtent : Angle
-
-    -- Basic route statistics...
-    , altitudeGained : Length.Length
-    , altitudeLost : Length.Length
-    , distanceClimbing : Length.Length
-    , distanceDescending : Length.Length
-    , steepestClimb : Float
-
-    -- Bunch of stuff we need in the tree to be able to locate problem points efficiently...
-    , gradientAtStart : Float
-    , gradientAtEnd : Float
-    , gradientChangeMaximumAbs : Float
-    , directionAtStart : Direction2d LocalCoords
-    , directionAtEnd : Direction2d LocalCoords
-    , directionChangeMaximumAbs : Angle
     }
 
 
@@ -91,16 +72,6 @@ sourceData treeNode =
 effectiveLatitude : PeteTree -> Angle
 effectiveLatitude treeNode =
     treeNode |> sourceData |> Tuple.first |> .latitude
-
-
-startPoint : PeteTree -> EarthPoint
-startPoint treeNode =
-    treeNode |> asRecord |> .startPoint
-
-
-endPoint : PeteTree -> EarthPoint
-endPoint treeNode =
-    treeNode |> asRecord |> .endPoint
 
 
 isLongitudeContained : Direction2d LocalCoords -> PeteTree -> Bool
@@ -144,16 +115,6 @@ skipCount treeNode =
             node.nodeContent.skipCount
 
 
-boundingBox : PeteTree -> BoundingBox3d Length.Meters LocalCoords
-boundingBox treeNode =
-    treeNode |> asRecord |> .boundingBox
-
-
-sphere : PeteTree -> Sphere3d Length.Meters LocalCoords
-sphere treeNode =
-    treeNode |> asRecord |> .sphere
-
-
 medianLongitude : PeteTree -> Direction2d LocalCoords
 medianLongitude treeNode =
     treeNode |> asRecord |> .medianLongitude
@@ -169,60 +130,9 @@ westwardTurn treeNode =
     treeNode |> asRecord |> .westwardExtent
 
 
-pointFromGpxWithReference : GPXSource -> GPXSource -> EarthPoint
-pointFromGpxWithReference reference gpx =
-    Point3d.xyz
-        (Direction2d.angleFrom reference.longitude gpx.longitude
-            |> Angle.inDegrees
-            |> (*) Spherical.metresPerDegree
-            |> (*) (Angle.cos gpx.latitude)
-            |> Length.meters
-        )
-        (gpx.latitude
-            |> Quantity.minus reference.latitude
-            |> Angle.inDegrees
-            |> (*) Spherical.metresPerDegree
-            |> Length.meters
-        )
-        (gpx.altitude |> Quantity.minus reference.altitude)
-
-
-gpxFromPointWithReference : GPXSource -> EarthPoint -> GPXSource
-gpxFromPointWithReference reference point =
-    let
-        ( x, y, z ) =
-            Point3d.toTuple inMeters point
-
-        longitude =
-            x
-                / cos latitude
-                / Spherical.metresPerDegree
-                + (Angle.inDegrees <| Direction2d.toAngle reference.longitude)
-
-        latitude =
-            y / Spherical.metresPerDegree + Angle.inDegrees reference.latitude
-
-        altitude =
-            z
-    in
-    GPXSource
-        (Direction2d.fromAngle <| Angle.degrees longitude)
-        (Angle.degrees latitude)
-        (Length.meters altitude)
-
-
 makeRoadSection : GPXSource -> GPXSource -> GPXSource -> RoadSection
 makeRoadSection reference earth1 earth2 =
     let
-        local1 =
-            pointFromGpxWithReference reference earth1
-
-        local2 =
-            pointFromGpxWithReference reference earth2
-
-        box =
-            BoundingBox3d.from local1 local2
-
         range : Length.Length
         range =
             Length.meters <|
@@ -236,27 +146,8 @@ makeRoadSection reference earth1 earth2 =
                 |> Direction2d.rotateBy
                     (Direction2d.angleFrom earth1.longitude earth2.longitude |> Quantity.half)
 
-        altitudeChange =
-            Point3d.zCoordinate local2 |> Quantity.minus (Point3d.zCoordinate local1)
-
-        gradient =
-            if (range |> Quantity.greaterThanZero) && (altitudeChange |> Quantity.greaterThanZero) then
-                100.0 * Quantity.ratio altitudeChange range
-
-            else
-                0.0
-
-        bearing =
-            Angle.radians <|
-                Spherical.findBearingToTarget
-                    ( Angle.inRadians earth1.latitude, Angle.inRadians <| Direction2d.toAngle earth1.longitude )
-                    ( Angle.inRadians earth2.latitude, Angle.inRadians <| Direction2d.toAngle earth2.longitude )
     in
     { sourceData = ( earth1, earth2 )
-    , startPoint = local1
-    , endPoint = local2
-    , boundingBox = box
-    , sphere = containingSphere box
     , trueLength = range
     , skipCount = 1
     , medianLongitude = medianLon
@@ -270,27 +161,6 @@ makeRoadSection reference earth1 earth2 =
             Quantity.min
                 (Direction2d.angleFrom medianLon earth1.longitude)
                 (Direction2d.angleFrom medianLon earth2.longitude)
-    , altitudeGained = Quantity.max Quantity.zero altitudeChange
-    , altitudeLost = Quantity.max Quantity.zero <| Quantity.negate altitudeChange
-    , distanceClimbing =
-        if altitudeChange |> Quantity.greaterThanZero then
-            range
-
-        else
-            Quantity.zero
-    , distanceDescending =
-        if altitudeChange |> Quantity.lessThanZero then
-            range
-
-        else
-            Quantity.zero
-    , steepestClimb = max 0.0 gradient
-    , gradientAtStart = gradient
-    , gradientAtEnd = gradient
-    , gradientChangeMaximumAbs = abs gradient
-    , directionAtStart = Direction2d.fromAngle bearing
-    , directionAtEnd = Direction2d.fromAngle bearing
-    , directionChangeMaximumAbs = Angle.degrees 0
     }
 
 
@@ -312,19 +182,12 @@ treeFromList track =
         combineInfo : PeteTree -> PeteTree -> RoadSection
         combineInfo info1 info2 =
             let
-                box =
-                    BoundingBox3d.union (boundingBox info1) (boundingBox info2)
-
                 sharedMedian =
                     medianLongitude info1
                         |> Direction2d.rotateBy
                             (Direction2d.angleFrom (medianLongitude info1) (medianLongitude info2) |> Quantity.half)
             in
             { sourceData = ( Tuple.first (sourceData info1), Tuple.second (sourceData info2) )
-            , startPoint = startPoint info1
-            , endPoint = endPoint info2
-            , boundingBox = box
-            , sphere = containingSphere box
             , trueLength = Quantity.plus (trueLength info1) (trueLength info2)
             , skipCount = skipCount info1 + skipCount info2
             , medianLongitude = sharedMedian
@@ -348,48 +211,6 @@ treeFromList track =
                         |> Direction2d.rotateBy (westwardTurn info2)
                         |> Direction2d.angleFrom sharedMedian
                     )
-            , altitudeGained =
-                Quantity.plus
-                    (info1 |> asRecord |> .altitudeGained)
-                    (info2 |> asRecord |> .altitudeGained)
-            , altitudeLost =
-                Quantity.plus
-                    (info1 |> asRecord |> .altitudeLost)
-                    (info2 |> asRecord |> .altitudeLost)
-            , distanceClimbing =
-                Quantity.plus
-                    (info1 |> asRecord |> .distanceClimbing)
-                    (info2 |> asRecord |> .distanceClimbing)
-            , distanceDescending =
-                Quantity.plus
-                    (info1 |> asRecord |> .distanceDescending)
-                    (info2 |> asRecord |> .distanceDescending)
-            , steepestClimb =
-                max (info1 |> asRecord |> .steepestClimb)
-                    (info2 |> asRecord |> .steepestClimb)
-            , gradientAtStart = info1 |> asRecord |> .gradientAtStart
-            , gradientAtEnd = info2 |> asRecord |> .gradientAtEnd
-            , gradientChangeMaximumAbs =
-                Maybe.withDefault 0.0 <|
-                    List.maximum
-                        [ info1 |> asRecord |> .gradientChangeMaximumAbs
-                        , info2 |> asRecord |> .gradientChangeMaximumAbs
-                        , abs <|
-                            (info1 |> asRecord |> .gradientAtEnd)
-                                - (info2 |> asRecord |> .gradientAtStart)
-                        ]
-            , directionAtStart = info1 |> asRecord |> .directionAtStart
-            , directionAtEnd = info2 |> asRecord |> .directionAtEnd
-            , directionChangeMaximumAbs =
-                Maybe.withDefault Quantity.zero <|
-                    Quantity.maximum
-                        [ info1 |> asRecord |> .directionChangeMaximumAbs
-                        , info2 |> asRecord |> .directionChangeMaximumAbs
-                        , Quantity.abs <|
-                            Direction2d.angleFrom
-                                (info1 |> asRecord |> .directionAtEnd)
-                                (info2 |> asRecord |> .directionAtStart)
-                        ]
             }
 
         treeBuilder : Int -> List GPXSource -> ( Maybe PeteTree, List GPXSource )
@@ -450,24 +271,6 @@ leafFromIndex index treeNode =
                 leafFromIndex (index - skipCount info.left) info.right
 
 
-earthPointFromIndex : Int -> PeteTree -> EarthPoint
-earthPointFromIndex index treeNode =
-    case treeNode of
-        Leaf info ->
-            if index <= 0 then
-                info.startPoint
-
-            else
-                info.endPoint
-
-        Node info ->
-            if index < skipCount info.left then
-                earthPointFromIndex index info.left
-
-            else
-                earthPointFromIndex (index - skipCount info.left) info.right
-
-
 gpxPointFromIndex : Int -> PeteTree -> GPXSource
 gpxPointFromIndex index treeNode =
     case treeNode of
@@ -484,85 +287,6 @@ gpxPointFromIndex index treeNode =
 
             else
                 gpxPointFromIndex (index - skipCount info.left) info.right
-
-
-nearestToRay :
-    Axis3d Meters LocalCoords
-    -> PeteTree
-    -> Int
-nearestToRay ray treeNode =
-    -- Build a new query here.
-    -- Try: compute distance to each box centres.
-    -- At each level, pick "closest" child and recurse.
-    -- Not good enough. Need deeper search, say for all intersected boxes.
-    -- Bit of recursive magic to get the "index" number.
-    let
-        helper withNode skip =
-            case withNode of
-                Leaf leaf ->
-                    let
-                        startDistance =
-                            leaf.startPoint |> Point3d.distanceFromAxis ray
-
-                        endDistance =
-                            leaf.endPoint |> Point3d.distanceFromAxis ray
-                    in
-                    if startDistance |> Quantity.lessThanOrEqualTo endDistance then
-                        ( skip, startDistance )
-
-                    else
-                        ( skip + 1, endDistance )
-
-                Node node ->
-                    let
-                        ( leftIntersects, rightIntersects ) =
-                            ( Axis3d.intersectionWithSphere (sphere node.left) ray /= Nothing
-                            , Axis3d.intersectionWithSphere (sphere node.right) ray /= Nothing
-                            )
-
-                        leftDistance =
-                            -- How close are we to the neighbourhood?
-                            sphere node.left
-                                |> Sphere3d.centerPoint
-                                |> Point3d.distanceFromAxis ray
-                                |> Quantity.minus (sphere node.left |> Sphere3d.radius)
-
-                        rightDistance =
-                            sphere node.right
-                                |> Sphere3d.centerPoint
-                                |> Point3d.distanceFromAxis ray
-                                |> Quantity.minus (sphere node.right |> Sphere3d.radius)
-                    in
-                    case ( leftIntersects, rightIntersects ) of
-                        ( True, True ) ->
-                            -- Could go either way
-                            let
-                                ( leftBestIndex, leftBestDistance ) =
-                                    helper node.left skip
-
-                                ( rightBestIndex, rightBestDistance ) =
-                                    helper node.right (skip + skipCount node.left)
-                            in
-                            if leftBestDistance |> Quantity.lessThanOrEqualTo rightBestDistance then
-                                ( leftBestIndex, leftBestDistance )
-
-                            else
-                                ( rightBestIndex, rightBestDistance )
-
-                        ( True, False ) ->
-                            helper node.left skip
-
-                        ( False, True ) ->
-                            helper node.right (skip + skipCount node.left)
-
-                        ( False, False ) ->
-                            if leftDistance |> Quantity.lessThanOrEqualTo rightDistance then
-                                helper node.left skip
-
-                            else
-                                helper node.right (skip + skipCount node.left)
-    in
-    Tuple.first <| helper treeNode 0
 
 
 gpxDistance : GPXSource -> GPXSource -> Length.Length
@@ -651,44 +375,6 @@ nearestToLonLat click treeNode =
     Tuple.first <| helper treeNode 0
 
 
-containingSphere : BoundingBox3d Meters LocalCoords -> Sphere3d Meters LocalCoords
-containingSphere box =
-    let
-        here =
-            BoundingBox3d.centerPoint box
-
-        ( xs, ys, zs ) =
-            BoundingBox3d.dimensions box
-
-        radius =
-            Quantity.half <|
-                Quantity.sqrt <|
-                    Quantity.sum
-                        [ Quantity.squared xs
-                        , Quantity.squared ys
-                        , Quantity.squared zs
-                        ]
-    in
-    Sphere3d.withRadius radius here
-
-
 lngLatPair : ( Angle, Angle ) -> E.Value
 lngLatPair ( longitude, latitude ) =
     E.list E.float [ Angle.inDegrees longitude, Angle.inDegrees latitude ]
-
-
-buildPreview : List Int -> PeteTree -> List ( EarthPoint, GPXSource )
-buildPreview indices tree =
-    let
-        getDualCoords index =
-            -- Rather glaring inefficiency here.
-            ( earthPointFromIndex index tree
-            , gpxPointFromIndex index tree
-            )
-    in
-    List.map getDualCoords indices
-
-
-deleteSinglePoint : Int -> PeteTree -> PeteTree
-deleteSinglePoint index treeNode =
-    treeNode

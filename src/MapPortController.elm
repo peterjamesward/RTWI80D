@@ -24,6 +24,11 @@ type alias MapInfo =
     }
 
 
+defaultMapInfo : MapInfo
+defaultMapInfo =
+    MapInfo 0.0 0.0 0.0
+
+
 port mapCommands : E.Value -> Cmd msg
 
 
@@ -51,35 +56,6 @@ refreshMap =
             ]
 
 
-centreMap :
-    { m
-        | trackTree : Maybe PeteTree
-        , renderDepth : Int
-        , currentPosition : Int
-        , referenceLonLat : GPXSource
-    }
-    -> Cmd msg
-centreMap model =
-    -- Centre map
-    case model.trackTree of
-        Just tree ->
-            let
-                { longitude, latitude, altitude } =
-                    earthPointFromIndex model.currentPosition tree
-                        |> gpxFromPointWithReference model.referenceLonLat
-            in
-            mapCommands <|
-                E.object
-                    [ ( "Cmd", E.string "Centre" )
-                    , ( "token", E.string mapboxKey )
-                    , ( "lon", E.float <| Angle.inDegrees <| Direction2d.toAngle longitude )
-                    , ( "lat", E.float <| Angle.inDegrees latitude )
-                    ]
-
-        Nothing ->
-            Cmd.none
-
-
 centreMapOnCurrent : TrackLoaded -> Cmd msg
 centreMapOnCurrent track =
     let
@@ -93,41 +69,6 @@ centreMapOnCurrent track =
             , ( "lon", E.float <| Angle.inDegrees <| Direction2d.toAngle longitude )
             , ( "lat", E.float <| Angle.inDegrees latitude )
             ]
-
-
-
-{-
-   deferredMapRepaint msgWrapper =
-       -- This is now in JS, where it quietly just works.
-       after 50 (RepaintMap |> msgWrapper)
--}
-
-
-update :
-    MapMsg
-    -> TrackLoaded
-    -> List (ToolAction msg)
-update mapMsg track =
-    case mapMsg of
-        MapPortMessage value ->
-            processMapPortMessage track value
-
-
-
---toggleDragging : Bool -> Track -> Cmd msg
---toggleDragging isDragging track =
---    commandPort <|
---        E.object
---            [ ( "Cmd", E.string "Drag" )
---            , ( "Enable", E.bool isDragging )
---            , ( "points", trackPointsToJSON track ) -- Make track points draggable
---            ]
---requestElevations : Cmd msg
---requestElevations =
---    commandPort <|
---        E.object
---            [ ( "Cmd", E.string "Elev" )
---            ]
 
 
 addTrackToMap : TrackLoaded -> Cmd msg
@@ -208,11 +149,22 @@ msgDecoder =
     field "msg" string
 
 
+update :
+    MapMsg
+    -> TrackLoaded
+    -> List (ToolAction msg)
+update mapMsg track =
+    case mapMsg of
+        MapPortMessage value ->
+            processMapPortMessage track value
+
+
 processMapPortMessage :
     TrackLoaded
     -> E.Value
     -> List (ToolAction msg)
 processMapPortMessage track json =
+    -- Only interested in click and bounding box information.
     let
         jsonMsg =
             D.decodeValue msgDecoder json
@@ -245,26 +197,5 @@ processMapPortMessage track json =
                 _ ->
                     []
 
-        --( Ok "drag", Just track ) ->
-        --    case draggedOnMap json track of
-        --        Just undoEntry ->
-        --            processPostUpdateAction
-        --                model
-        --                (PostUpdateActions.ActionTrackChanged TrackEditType.EditPreservesIndex undoEntry)
-        --
-        --        Nothing ->
-        --            ( Model model, Cmd.none )
-        --
-        --( Ok "elevations", Just track ) ->
-        --    case elevations of
-        --        Ok mapElevations ->
-        --            processPostUpdateAction model
-        --                (PostUpdateActions.ActionTrackChanged
-        --                    TrackEditType.EditPreservesIndex
-        --                    (RotateRoute.buildMapElevations mapElevations track)
-        --                )
-        --
-        --        _ ->
-        --            ( Model model, Cmd.none )
         _ ->
             []

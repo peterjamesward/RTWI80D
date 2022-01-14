@@ -1,26 +1,11 @@
 module SceneBuilderMap exposing (..)
 
-import Actions exposing (PreviewData, PreviewShape(..))
 import Angle exposing (Angle)
-import BoundingBox3d exposing (BoundingBox3d)
-import Dict exposing (Dict)
 import Direction2d
 import DomainModel exposing (..)
-import Element
 import Json.Encode as E
 import Length exposing (Meters)
-import LocalCoords exposing (LocalCoords)
 import TrackLoaded exposing (TrackLoaded)
-
-
-renderPreview : PreviewData -> E.Value
-renderPreview { tag, shape, colour, points } =
-    case shape of
-        PreviewCircle ->
-            pointsToJSON <| List.map Tuple.second points
-
-        PreviewLine ->
-            lineToJSON <| List.map Tuple.second points
 
 
 lineToJSON : List GPXSource -> E.Value
@@ -121,38 +106,7 @@ renderMapJson track =
                             |> renderTree (depth - 1) notLeaf.right
                             |> renderTree (depth - 1) notLeaf.left
 
-        renderTreeSelectively :
-            BoundingBox3d Meters LocalCoords
-            -> Int
-            -> PeteTree
-            -> List E.Value
-            -> List E.Value
-        renderTreeSelectively box depth someNode accum =
-            case someNode of
-                Leaf leafNode ->
-                    makeVisibleSegment someNode :: accum
-
-                Node notLeaf ->
-                    if notLeaf.nodeContent.boundingBox |> BoundingBox3d.intersects box then
-                        -- Ignore depth cutoff near or in the box
-                        accum
-                            |> renderTreeSelectively box (depth - 1) notLeaf.right
-                            |> renderTreeSelectively box (depth - 1) notLeaf.left
-
-                    else
-                        -- Outside box, apply cutoff.
-                        accum
-                            |> renderTree (depth - 1) notLeaf.right
-                            |> renderTree (depth - 1) notLeaf.left
-
-        renderFirstPoint treeNode =
-            lngLatPair <| mapLocation <| Tuple.first <| sourceData treeNode
-
-        current =
-            startPoint <| leafFromIndex track.currentPosition track.trackTree
-
-        detailBox =
-            BoundingBox3d.withDimensions ( boxSide, boxSide, boxSide ) current
+        --TODO: Render based on Map bounding box.
 
         geometry =
             E.object
@@ -160,9 +114,7 @@ renderMapJson track =
                 , ( "coordinates", E.list identity coordinates )
                 ]
 
-        coordinates =
-            renderFirstPoint track.trackTree
-                :: renderTreeSelectively detailBox track.renderDepth track.trackTree []
+        coordinates = []
     in
     E.object
         [ ( "type", E.string "Feature" )
