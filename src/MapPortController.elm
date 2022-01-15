@@ -4,7 +4,7 @@ import Actions exposing (ToolAction(..))
 import Angle
 import Direction2d
 import DomainModel exposing (..)
-import Json.Decode as D exposing (Decoder, field, string)
+import Json.Decode as D exposing (Decoder, at, field, string)
 import Json.Encode as E
 import Length
 import MapboxKey exposing (mapboxKey)
@@ -168,11 +168,6 @@ processMapPortMessage track json =
     let
         jsonMsg =
             D.decodeValue msgDecoder json
-
-        ( lat, lon ) =
-            ( D.decodeValue (D.field "lat" D.float) json
-            , D.decodeValue (D.field "lon" D.float) json
-            )
     in
     case jsonMsg of
         Ok "click" ->
@@ -180,7 +175,11 @@ processMapPortMessage track json =
             --, 'lat' : e.lat()
             --, 'lon' : e.lon()
             --} );
-            case ( lat, lon ) of
+            case
+                ( D.decodeValue (D.field "lat" D.float) json
+                , D.decodeValue (D.field "lon" D.float) json
+                )
+            of
                 ( Ok lat1, Ok lon1 ) ->
                     let
                         gpxPoint =
@@ -193,6 +192,27 @@ processMapPortMessage track json =
                             DomainModel.nearestToLonLat gpxPoint track.trackTree
                     in
                     [ SetCurrent index ]
+
+                _ ->
+                    []
+
+        Ok "bounds" ->
+            let
+                minLon =
+                    D.decodeValue (at [ "sw", "lng" ] D.float) json
+
+                maxLon =
+                    D.decodeValue (at [ "ne", "lng" ] D.float) json
+
+                minLat =
+                    D.decodeValue (at [ "sw", "lat" ] D.float) json
+
+                maxLat =
+                    D.decodeValue (at [ "ne", "lat" ] D.float) json
+            in
+            case ( ( minLon, maxLon ), ( minLat, maxLat ) ) of
+                ( ( Ok aMinLon, Ok aMaxLon ), ( Ok aMinLat, Ok aMaxLat ) ) ->
+                    [ SetBounds aMinLon aMaxLon aMinLat aMaxLat ]
 
                 _ ->
                     []

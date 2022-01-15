@@ -11,6 +11,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Input as Input exposing (button)
 import File exposing (File)
+import File.Download as Download
 import File.Select as Select
 import FlatColors.ChinesePalette
 import GeoCodeDecoders exposing (IpInfo)
@@ -45,6 +46,7 @@ type Msg
     | Resize Int Int
     | GotWindowSize (Result Dom.Error Dom.Viewport)
     | ToolsMsg ToolsController.ToolMsg
+    | SaveCBOR
 
 
 type alias Model =
@@ -59,6 +61,10 @@ type alias Model =
     , scene : List (Entity LocalCoords)
     , viewMode : ViewMode
     , viewMapContext : Maybe MapContext
+    , minLon : Float
+    , maxLon : Float
+    , minLat : Float
+    , maxLat : Float
 
     -- Layout stuff
     , windowSize : ( Float, Float )
@@ -93,6 +99,10 @@ init =
       , viewMapContext = Nothing
       , windowSize = ( 1000, 800 )
       , contentArea = ( Pixels.pixels 800, Pixels.pixels 500 )
+      , minLon = -180
+      , maxLon = 180
+      , minLat = -80
+      , maxLat = 80
       , modalMessage = Nothing
       , toolOptions = ToolsController.defaultOptions
       }
@@ -280,6 +290,38 @@ update msg model =
             , performActionCommands actions modelAfterActions
             )
 
+        SaveCBOR ->
+            case model.track of
+                Just track ->
+                    ( model, outputGPX model )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+
+outputGPX : Model -> Cmd Msg
+outputGPX model =
+    let
+        cborString =
+            Maybe.map (always "WRITE CBOR HERE") model.track
+                |> Maybe.withDefault "Sorry, nothing to write."
+
+        outputFilename =
+            case model.filename of
+                Just filename ->
+                    filename
+                        ++ (if not (String.endsWith ".CBOR" (String.toUpper filename)) then
+                                ".cbor"
+
+                            else
+                                ""
+                           )
+
+                Nothing ->
+                    "NOFILENAME"
+    in
+    Download.string outputFilename "binary" cborString
+
 
 showModalMessage msg =
     el (centerX :: centerY :: neatToolsBorder) <|
@@ -320,6 +362,15 @@ topLoadingBar model =
                 ]
                 { onPress = Just GpxRequested
                 , label = text "Load GPX file"
+                }
+
+        saveCBOR =
+            button
+                [ padding 5
+                , Background.color FlatColors.ChinesePalette.antiFlashWhite
+                ]
+                { onPress = Just SaveCBOR
+                , label = text "Save as CBOR"
                 }
     in
     row
@@ -409,6 +460,14 @@ performActionsOnModel actions model =
                             { track | currentPosition = position }
                     in
                     { mdl | track = Just newTrack }
+
+                ( SetBounds minLon maxLon minLat maxLat, Just track ) ->
+                    { mdl
+                        | minLon = minLon
+                        , maxLon = maxLon
+                        , minLat = minLat
+                        , maxLat = maxLat
+                    }
 
                 _ ->
                     mdl

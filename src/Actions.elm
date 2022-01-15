@@ -14,6 +14,7 @@ type ToolAction msg
     | DelayMessage Int msg
     | MapCenterOnCurrent
     | DeleteSinglePoint Int
+    | SetBounds Float Float Float Float
     | NoAction
 
 
