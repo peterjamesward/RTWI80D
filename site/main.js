@@ -6609,17 +6609,32 @@ var $author$project$MapPortController$newTrackRendering = function (data) {
 					_Utils_Tuple2('points', $elm$json$Json$Encode$null)
 				])));
 };
-var $ianmackenzie$elm_units$Quantity$greaterThan = F2(
-	function (_v0, _v1) {
-		var y = _v0.a;
-		var x = _v1.a;
-		return _Utils_cmp(x, y) > 0;
+var $elm$core$Basics$clamp = F3(
+	function (low, high, number) {
+		return (_Utils_cmp(number, low) < 0) ? low : ((_Utils_cmp(number, high) > 0) ? high : number);
 	});
-var $ianmackenzie$elm_units$Quantity$lessThan = F2(
-	function (_v0, _v1) {
-		var y = _v0.a;
-		var x = _v1.a;
-		return _Utils_cmp(x, y) < 0;
+var $ianmackenzie$elm_units_interval$Quantity$Interval$Interval = function (a) {
+	return {$: 'Interval', a: a};
+};
+var $ianmackenzie$elm_units_interval$Quantity$Interval$fromEndpoints = function (givenEndpoints) {
+	var _v0 = givenEndpoints;
+	var a = _v0.a.a;
+	var b = _v0.b.a;
+	return (_Utils_cmp(a, b) < 1) ? $ianmackenzie$elm_units_interval$Quantity$Interval$Interval(givenEndpoints) : $ianmackenzie$elm_units_interval$Quantity$Interval$Interval(
+		_Utils_Tuple2(
+			$ianmackenzie$elm_units$Quantity$Quantity(b),
+			$ianmackenzie$elm_units$Quantity$Quantity(a)));
+};
+var $elm$core$Basics$ge = _Utils_ge;
+var $ianmackenzie$elm_units_interval$Quantity$Interval$intersects = F2(
+	function (_v0, _v2) {
+		var _v1 = _v0.a;
+		var a1 = _v1.a.a;
+		var b1 = _v1.b.a;
+		var _v3 = _v2.a;
+		var a2 = _v3.a.a;
+		var b2 = _v3.b.a;
+		return (_Utils_cmp(a1, b2) < 1) && (_Utils_cmp(b1, a2) > -1);
 	});
 var $elm$core$Debug$log = _Debug_log;
 var $author$project$DomainModel$eastwardTurn = function (treeNode) {
@@ -6671,55 +6686,35 @@ var $author$project$SceneBuilderMap$useBounds = F5(
 				mapLocation(
 					$author$project$DomainModel$sourceData(node).b));
 		};
-		var renderTree = F3(
-			function (depth, someNode, accum) {
-				if (someNode.$ === 'Leaf') {
-					var leafNode = someNode.a;
-					return A2(
-						$elm$core$List$cons,
-						makeVisibleSegment(someNode),
-						accum);
-				} else {
-					var notLeaf = someNode.a;
-					return (depth <= 0) ? A2(
-						$elm$core$List$cons,
-						makeVisibleSegment(someNode),
-						accum) : A3(
-						renderTree,
-						depth - 1,
-						notLeaf.left,
-						A3(renderTree, depth - 1, notLeaf.right, accum));
-				}
-			});
 		var easternEdge = $ianmackenzie$elm_units$Angle$degrees(minLon);
+		var visibleInterval = $ianmackenzie$elm_units_interval$Quantity$Interval$fromEndpoints(
+			_Utils_Tuple2(westernEdge, easternEdge));
 		var estimatedLeafCounter = F2(
-			function (treeNode, _v1) {
-				var runningCount = _v1.a;
-				var maxDepth = _v1.b;
-				if (A2(
-					$ianmackenzie$elm_units$Quantity$lessThan,
-					westernEdge,
-					$author$project$DomainModel$mostWesterly(treeNode)) && A2(
-					$ianmackenzie$elm_units$Quantity$greaterThan,
-					easternEdge,
-					$author$project$DomainModel$mostEasterly(treeNode))) {
+			function (treeNode, _v0) {
+				var runningCount = _v0.a;
+				var maxDepth = _v0.b;
+				var nodeInterval = $ianmackenzie$elm_units_interval$Quantity$Interval$fromEndpoints(
+					_Utils_Tuple2(
+						$author$project$DomainModel$mostWesterly(treeNode),
+						$author$project$DomainModel$mostEasterly(treeNode)));
+				if (A2($ianmackenzie$elm_units_interval$Quantity$Interval$intersects, visibleInterval, nodeInterval)) {
 					if (treeNode.$ === 'Leaf') {
 						var leaf = treeNode.a;
 						return _Utils_Tuple2(runningCount + 1, maxDepth);
 					} else {
 						var node = treeNode.a;
-						var _v3 = A2(
+						var _v2 = A2(
 							estimatedLeafCounter,
 							node.right,
 							_Utils_Tuple2(runningCount, maxDepth));
-						var rightCount = _v3.a;
-						var rightDepth = _v3.b;
-						var _v4 = A2(
+						var rightCount = _v2.a;
+						var rightDepth = _v2.b;
+						var _v3 = A2(
 							estimatedLeafCounter,
 							node.left,
 							_Utils_Tuple2(runningCount, maxDepth));
-						var leftCount = _v4.a;
-						var leftDepth = _v4.b;
+						var leftCount = _v3.a;
+						var leftDepth = _v3.b;
 						return _Utils_Tuple2(
 							(runningCount + leftCount) + rightCount,
 							1 + A2($elm$core$Basics$max, leftDepth, rightDepth));
@@ -6728,7 +6723,47 @@ var $author$project$SceneBuilderMap$useBounds = F5(
 					return _Utils_Tuple2(runningCount, maxDepth);
 				}
 			});
-		var coordinates = A3(renderTree, 10, track.trackTree, _List_Nil);
+		var renderTree = F3(
+			function (depth, someNode, accum) {
+				var nodeInterval = $ianmackenzie$elm_units_interval$Quantity$Interval$fromEndpoints(
+					_Utils_Tuple2(
+						$author$project$DomainModel$mostWesterly(someNode),
+						$author$project$DomainModel$mostEasterly(someNode)));
+				if (A2($ianmackenzie$elm_units_interval$Quantity$Interval$intersects, visibleInterval, nodeInterval)) {
+					if (someNode.$ === 'Leaf') {
+						var leafNode = someNode.a;
+						return A2(
+							$elm$core$List$cons,
+							makeVisibleSegment(someNode),
+							accum);
+					} else {
+						var notLeaf = someNode.a;
+						return (depth <= 0) ? A2(
+							$elm$core$List$cons,
+							makeVisibleSegment(someNode),
+							accum) : A3(
+							renderTree,
+							depth - 1,
+							notLeaf.left,
+							A3(renderTree, depth - 1, notLeaf.right, accum));
+					}
+				} else {
+					return _List_Nil;
+				}
+			});
+		var _v5 = A2(
+			estimatedLeafCounter,
+			track.trackTree,
+			_Utils_Tuple2(0, 0));
+		var visibleCount = _v5.a;
+		var visibleDepth = _v5.b;
+		var useDepth = A3(
+			$elm$core$Basics$clamp,
+			10,
+			22,
+			$elm$core$Basics$round(
+				30 - A2($elm$core$Basics$logBase, 2, visibleCount)));
+		var coordinates = A3(renderTree, useDepth, track.trackTree, _List_Nil);
 		var geometry = $elm$json$Json$Encode$object(
 			_List_fromArray(
 				[
@@ -6739,16 +6774,10 @@ var $author$project$SceneBuilderMap$useBounds = F5(
 					'coordinates',
 					A2($elm$json$Json$Encode$list, $elm$core$Basics$identity, coordinates))
 				]));
-		var _v5 = A2(
-			estimatedLeafCounter,
-			track.trackTree,
-			_Utils_Tuple2(0, 0));
-		var visibleCount = _v5.a;
-		var visibleDepth = _v5.b;
 		var _v6 = A2(
 			$elm$core$Debug$log,
 			'INTERESTING',
-			_Utils_Tuple2(visibleCount, visibleDepth));
+			_Utils_Tuple3(visibleCount, visibleDepth, useDepth));
 		return $elm$json$Json$Encode$object(
 			_List_fromArray(
 				[
@@ -6849,7 +6878,7 @@ var $author$project$Main$performActionsOnModel = F2(
 				return mdl;
 			});
 		var finalModel = A3($elm$core$List$foldl, performAction, model, actions);
-		return (_Utils_eq(model.minLon, finalModel.minLon) && _Utils_eq(model.maxLon, finalModel.maxLon)) ? finalModel : $author$project$Main$render(finalModel);
+		return $author$project$Main$render(finalModel);
 	});
 var $author$project$MapPortController$refreshMap = $author$project$MapPortController$mapCommands(
 	$elm$json$Json$Encode$object(
@@ -7140,7 +7169,6 @@ var $author$project$DomainModel$gpxDistance = F2(
 					$ianmackenzie$elm_geometry$Direction2d$toAngle(p2.longitude),
 					p2.latitude)));
 	});
-var $elm$core$Basics$ge = _Utils_ge;
 var $ianmackenzie$elm_units$Quantity$greaterThanOrEqualTo = F2(
 	function (_v0, _v1) {
 		var y = _v0.a;

@@ -39,6 +39,8 @@ type alias RoadSection =
     , medianLongitude : Direction2d LocalCoords
     , eastwardExtent : Angle
     , westwardExtent : Angle
+    --, minLatitude : Angle
+    --, maxLatitude : Angle
     }
 
 
@@ -172,6 +174,8 @@ makeRoadSection reference earth1 earth2 =
             Quantity.min
                 (Direction2d.angleFrom medianLon earth1.longitude)
                 (Direction2d.angleFrom medianLon earth2.longitude)
+    --, minLatitude = Quantity.min earth1.latitude earth2.latitude
+    --, maxLatitude = Quantity.max earth1.latitude earth2.latitude
     }
 
 
@@ -222,6 +226,14 @@ treeFromList track =
                         |> Direction2d.rotateBy (westwardTurn info2)
                         |> Direction2d.angleFrom sharedMedian
                     )
+            --, minLatitude =
+            --    Quantity.min
+            --        (info1 |> asRecord |> .minLatitude)
+            --        (info2 |> asRecord |> .minLatitude)
+            --, maxLatitude =
+            --    Quantity.max
+            --        (info1 |> asRecord |> .maxLatitude)
+            --        (info2 |> asRecord |> .maxLatitude)
             }
 
         treeBuilder : Int -> List GPXSource -> ( Maybe PeteTree, List GPXSource )

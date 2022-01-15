@@ -1,11 +1,14 @@
 module SceneBuilderMap exposing (..)
 
 import Angle exposing (Angle)
+import Angle.Interval as Interval
+import BoundingBox2d
 import Direction2d
 import DomainModel exposing (..)
 import Json.Encode as E
 import Length exposing (Meters)
 import Quantity
+import Quantity.Interval as Interval
 import TrackLoaded exposing (TrackLoaded)
 
 
@@ -77,10 +80,13 @@ useBounds : Float -> Float -> Float -> Float -> TrackLoaded -> E.Value
 useBounds minLon maxLon minLat maxLat track =
     let
         easternEdge =
-            Angle.degrees minLon
+            Angle.degrees maxLon
 
         westernEdge =
-            Angle.degrees maxLon
+            Angle.degrees minLon
+
+        visibleInterval =
+            Interval.fromEndpoints ( westernEdge, easternEdge )
 
         mapLocation : GPXSource -> ( Angle, Angle )
         mapLocation point =
@@ -97,10 +103,11 @@ useBounds minLon maxLon minLat maxLat track =
         --TODO: Render based on Map bounding box.
         --NOTE: We ignore any dateline concerns here.
         estimatedLeafCounter treeNode ( runningCount, maxDepth ) =
-            if
-                (mostWesterly treeNode |> Quantity.lessThan westernEdge)
-                    && (mostEasterly treeNode |> Quantity.greaterThan easternEdge)
-            then
+            let
+                nodeInterval =
+                    Interval.fromEndpoints ( mostWesterly treeNode, mostEasterly treeNode )
+            in
+            if nodeInterval |> Interval.intersects visibleInterval then
                 -- It's at least partly visible
                 case treeNode of
                     Leaf leaf ->
@@ -109,40 +116,54 @@ useBounds minLon maxLon minLat maxLat track =
                     Node node ->
                         let
                             ( leftCount, leftDepth ) =
-                                estimatedLeafCounter node.left (runningCount, maxDepth)
+                                estimatedLeafCounter node.left ( runningCount, maxDepth )
 
                             ( rightCount, rightDepth ) =
-                                estimatedLeafCounter node.right (runningCount, maxDepth)
+                                estimatedLeafCounter node.right ( runningCount, maxDepth )
                         in
                         ( runningCount + leftCount + rightCount
                         , 1 + max leftDepth rightDepth
                         )
 
             else
-                (runningCount, maxDepth)
+                ( runningCount, maxDepth )
 
         ( visibleCount, visibleDepth ) =
             estimatedLeafCounter track.trackTree ( 0, 0 )
-        
-        _ = Debug.log "INTERESTING" (visibleCount, visibleDepth)    
-            
+
+        useDepth =
+            clamp 10 22 <|
+                round <|
+                    30
+                        - logBase 2 (toFloat visibleCount)
+
+        _ =
+            Debug.log "INTERESTING" ( visibleCount, visibleDepth, useDepth )
+
         renderTree : Int -> PeteTree -> List E.Value -> List E.Value
         renderTree depth someNode accum =
-            case someNode of
-                Leaf leafNode ->
-                    makeVisibleSegment someNode :: accum
-
-                Node notLeaf ->
-                    if depth <= 0 then
+            let
+                nodeInterval =
+                    Interval.fromEndpoints ( mostWesterly someNode, mostEasterly someNode )
+            in
+            if nodeInterval |> Interval.intersects visibleInterval then
+                -- It's at least partly visible
+                case someNode of
+                    Leaf leafNode ->
                         makeVisibleSegment someNode :: accum
 
-                    else
-                        accum
-                            |> renderTree (depth - 1) notLeaf.right
-                            |> renderTree (depth - 1) notLeaf.left
+                    Node notLeaf ->
+                        if depth <= 0 then
+                            makeVisibleSegment someNode :: accum
 
-        
-        
+                        else
+                            accum
+                                |> renderTree (depth - 1) notLeaf.right
+                                |> renderTree (depth - 1) notLeaf.left
+
+            else
+                []
+
         geometry =
             E.object
                 [ ( "type", E.string "LineString" )
@@ -150,7 +171,7 @@ useBounds minLon maxLon minLat maxLat track =
                 ]
 
         coordinates =
-            renderTree 10 track.trackTree []
+            renderTree useDepth track.trackTree []
     in
     E.object
         [ ( "type", E.string "Feature" )
