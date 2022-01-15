@@ -76,17 +76,11 @@ pointsToJSON points =
         ]
 
 
-useBounds : Float -> Float -> Float -> Float -> TrackLoaded -> E.Value
+useBounds : Angle -> Angle -> Angle -> Angle -> TrackLoaded -> E.Value
 useBounds minLon maxLon minLat maxLat track =
     let
-        easternEdge =
-            Angle.degrees maxLon
-
-        westernEdge =
-            Angle.degrees minLon
-
         visibleInterval =
-            Interval.fromEndpoints ( westernEdge, easternEdge )
+            Interval.fromEndpoints ( minLon, maxLon )
 
         mapLocation : GPXSource -> ( Angle, Angle )
         mapLocation point =
@@ -105,7 +99,7 @@ useBounds minLon maxLon minLat maxLat track =
         estimatedLeafCounter treeNode ( runningCount, maxDepth ) =
             let
                 nodeInterval =
-                    Interval.fromEndpoints ( mostWesterly treeNode, mostEasterly treeNode )
+                    Interval.fromEndpoints ( minLongitude treeNode, maxLongitude treeNode )
             in
             if nodeInterval |> Interval.intersects visibleInterval then
                 -- It's at least partly visible
@@ -132,37 +126,32 @@ useBounds minLon maxLon minLat maxLat track =
             estimatedLeafCounter track.trackTree ( 0, 0 )
 
         useDepth =
-            clamp 10 22 <|
+            clamp 10 21 <|
                 round <|
-                    30
+                    29
                         - logBase 2 (toFloat visibleCount)
 
-        _ =
-            Debug.log "INTERESTING" ( visibleCount, visibleDepth, useDepth )
-
+        --_ =
+        --    Debug.log "INTERESTING" ( visibleCount, visibleDepth, useDepth )
         renderTree : Int -> PeteTree -> List E.Value -> List E.Value
         renderTree depth someNode accum =
             let
                 nodeInterval =
-                    Interval.fromEndpoints ( mostWesterly someNode, mostEasterly someNode )
+                    Interval.fromEndpoints ( minLongitude someNode, maxLongitude someNode )
             in
-            if nodeInterval |> Interval.intersects visibleInterval then
-                -- It's at least partly visible
-                case someNode of
-                    Leaf leafNode ->
-                        makeVisibleSegment someNode :: accum
+            -- It's at least partly visible
+            case someNode of
+                Leaf leaf ->
+                    makeVisibleSegment someNode :: accum
 
-                    Node notLeaf ->
-                        if depth <= 0 then
-                            makeVisibleSegment someNode :: accum
+                Node node ->
+                    if nodeInterval |> Interval.intersects visibleInterval then
+                        accum
+                            |> renderTree (depth - 1) node.right
+                            |> renderTree (depth - 1) node.left
 
-                        else
-                            accum
-                                |> renderTree (depth - 1) notLeaf.right
-                                |> renderTree (depth - 1) notLeaf.left
-
-            else
-                []
+                    else
+                        accum
 
         geometry =
             E.object

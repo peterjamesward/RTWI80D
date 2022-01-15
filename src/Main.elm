@@ -1,6 +1,7 @@
 module Main exposing (main)
 
 import Actions exposing (ToolAction(..))
+import Angle exposing (Angle)
 import Browser exposing (document)
 import Browser.Dom as Dom exposing (getViewport, getViewportOf)
 import Browser.Events
@@ -62,10 +63,10 @@ type alias Model =
     , scene : List (Entity LocalCoords)
     , viewMode : ViewMode
     , viewMapContext : Maybe MapContext
-    , minLon : Float
-    , maxLon : Float
-    , minLat : Float
-    , maxLat : Float
+    , minLon : Angle
+    , maxLon : Angle
+    , minLat : Angle
+    , maxLat : Angle
 
     -- Layout stuff
     , windowSize : ( Float, Float )
@@ -100,10 +101,10 @@ init =
       , viewMapContext = Nothing
       , windowSize = ( 1000, 800 )
       , contentArea = ( Pixels.pixels 800, Pixels.pixels 500 )
-      , minLon = -180
-      , maxLon = 180
-      , minLat = -80
-      , maxLat = 80
+      , minLon = Angle.degrees -180
+      , maxLon = Angle.degrees 180
+      , minLat = Angle.degrees -80
+      , maxLat = Angle.degrees 80
       , modalMessage = Nothing
       , toolOptions = ToolsController.defaultOptions
       }
@@ -464,10 +465,10 @@ performActionsOnModel actions model =
 
                 ( SetBounds minLon maxLon minLat maxLat, Just track ) ->
                     { mdl
-                        | minLon = minLon
-                        , maxLon = maxLon
-                        , minLat = minLat
-                        , maxLat = maxLat
+                        | minLon = Angle.degrees minLon
+                        , maxLon = Angle.degrees maxLon
+                        , minLat = Angle.degrees minLat
+                        , maxLat = Angle.degrees maxLat
                     }
 
                 _ ->
@@ -500,7 +501,12 @@ performActionCommands actions model =
 
                 ( SetBounds minLon maxLon minLat maxLat, Just track ) ->
                     MapPortController.newTrackRendering <|
-                        SceneBuilderMap.useBounds minLon maxLon minLat maxLat track
+                        SceneBuilderMap.useBounds
+                            model.minLon
+                            model.maxLon
+                            model.minLat
+                            model.maxLat
+                            track
 
                 _ ->
                     Cmd.none

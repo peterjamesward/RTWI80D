@@ -199,8 +199,8 @@ processMapPortMessage track json =
                             , altitude = Length.meters 0.0
                             }
 
-                        index =
-                            DomainModel.nearestToLonLat gpxPoint track.trackTree
+                        index = 0
+                            --DomainModel.nearestToLonLat gpxPoint track.trackTree
                     in
                     [ SetCurrent index ]
 

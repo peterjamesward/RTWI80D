@@ -35,12 +35,9 @@ type alias RoadSection =
     , trueLength : Length.Length
     , skipCount : Int
 
-    -- For efficient detection of map clicks...
-    , medianLongitude : Direction2d LocalCoords
-    , eastwardExtent : Angle
-    , westwardExtent : Angle
-    --, minLatitude : Angle
-    --, maxLatitude : Angle
+    -- For efficient rendering, knowing we do not cross the date line!
+    , minLongitude : Angle
+    , maxLongitude : Angle
     }
 
 
@@ -71,37 +68,6 @@ sourceData treeNode =
     treeNode |> asRecord |> .sourceData
 
 
-effectiveLatitude : PeteTree -> Angle
-effectiveLatitude treeNode =
-    treeNode |> sourceData |> Tuple.first |> .latitude
-
-
-isLongitudeContained : Direction2d LocalCoords -> PeteTree -> Bool
-isLongitudeContained longitude treeNode =
-    let
-        turnFromMedianToGiven =
-            Direction2d.angleFrom (medianLongitude treeNode) longitude
-    in
-    (turnFromMedianToGiven |> Quantity.greaterThanOrEqualTo (westwardTurn treeNode))
-        && (turnFromMedianToGiven |> Quantity.lessThanOrEqualTo (eastwardTurn treeNode))
-
-
-rotationAwayFrom : Direction2d LocalCoords -> PeteTree -> Angle
-rotationAwayFrom longitude treeNode =
-    -- By how much, in any direction, would we need to move the longitude
-    -- to make it "contained". This is for selecting a branch if neither side is "contained".
-    let
-        nodeEast =
-            medianLongitude treeNode |> Direction2d.rotateBy (eastwardTurn treeNode)
-
-        nodeWest =
-            medianLongitude treeNode |> Direction2d.rotateBy (westwardTurn treeNode)
-    in
-    Quantity.min
-        (Quantity.abs <| Direction2d.angleFrom longitude nodeEast)
-        (Quantity.abs <| Direction2d.angleFrom longitude nodeWest)
-
-
 trueLength : PeteTree -> Length
 trueLength treeNode =
     treeNode |> asRecord |> .trueLength
@@ -117,31 +83,12 @@ skipCount treeNode =
             node.nodeContent.skipCount
 
 
-mostEasterly treeNode =
-    medianLongitude treeNode
-        |> Direction2d.rotateBy (eastwardTurn treeNode)
-        |> Direction2d.toAngle
+maxLongitude treeNode =
+    treeNode |> asRecord |> .maxLongitude
 
 
-mostWesterly treeNode =
-    medianLongitude treeNode
-        |> Direction2d.rotateBy (westwardTurn treeNode)
-        |> Direction2d.toAngle
-
-
-medianLongitude : PeteTree -> Direction2d LocalCoords
-medianLongitude treeNode =
-    treeNode |> asRecord |> .medianLongitude
-
-
-eastwardTurn : PeteTree -> Angle
-eastwardTurn treeNode =
-    treeNode |> asRecord |> .eastwardExtent
-
-
-westwardTurn : PeteTree -> Angle
-westwardTurn treeNode =
-    treeNode |> asRecord |> .westwardExtent
+minLongitude treeNode =
+    treeNode |> asRecord |> .minLongitude
 
 
 makeRoadSection : GPXSource -> GPXSource -> GPXSource -> RoadSection
@@ -153,29 +100,18 @@ makeRoadSection reference earth1 earth2 =
                 Spherical.range
                     ( Direction2d.toAngle earth1.longitude, earth1.latitude )
                     ( Direction2d.toAngle earth2.longitude, earth2.latitude )
-
-        medianLon =
-            -- Careful, don't average because of -pi/+pi, work out half the turn.
-            earth1.longitude
-                |> Direction2d.rotateBy
-                    (Direction2d.angleFrom earth1.longitude earth2.longitude |> Quantity.half)
     in
     { sourceData = ( earth1, earth2 )
     , trueLength = range
     , skipCount = 1
-    , medianLongitude = medianLon
-    , eastwardExtent =
-        Quantity.max Quantity.zero <|
-            Quantity.max
-                (Direction2d.angleFrom medianLon earth1.longitude)
-                (Direction2d.angleFrom medianLon earth2.longitude)
-    , westwardExtent =
-        Quantity.min Quantity.zero <|
-            Quantity.min
-                (Direction2d.angleFrom medianLon earth1.longitude)
-                (Direction2d.angleFrom medianLon earth2.longitude)
-    --, minLatitude = Quantity.min earth1.latitude earth2.latitude
-    --, maxLatitude = Quantity.max earth1.latitude earth2.latitude
+    , minLongitude =
+        Quantity.min
+            (Direction2d.toAngle <| earth1.longitude)
+            (Direction2d.toAngle <| earth2.longitude)
+    , maxLongitude =
+        Quantity.max
+            (Direction2d.toAngle <| earth1.longitude)
+            (Direction2d.toAngle <| earth2.longitude)
     }
 
 
@@ -196,44 +132,17 @@ treeFromList track =
 
         combineInfo : PeteTree -> PeteTree -> RoadSection
         combineInfo info1 info2 =
-            let
-                sharedMedian =
-                    medianLongitude info1
-                        |> Direction2d.rotateBy
-                            (Direction2d.angleFrom (medianLongitude info1) (medianLongitude info2) |> Quantity.half)
-            in
             { sourceData = ( Tuple.first (sourceData info1), Tuple.second (sourceData info2) )
             , trueLength = Quantity.plus (trueLength info1) (trueLength info2)
             , skipCount = skipCount info1 + skipCount info2
-            , medianLongitude = sharedMedian
-            , eastwardExtent =
-                Quantity.max
-                    (medianLongitude info1
-                        |> Direction2d.rotateBy (eastwardTurn info1)
-                        |> Direction2d.angleFrom sharedMedian
-                    )
-                    (medianLongitude info2
-                        |> Direction2d.rotateBy (eastwardTurn info2)
-                        |> Direction2d.angleFrom sharedMedian
-                    )
-            , westwardExtent =
+            , minLongitude =
                 Quantity.min
-                    (medianLongitude info1
-                        |> Direction2d.rotateBy (westwardTurn info1)
-                        |> Direction2d.angleFrom sharedMedian
-                    )
-                    (medianLongitude info2
-                        |> Direction2d.rotateBy (westwardTurn info2)
-                        |> Direction2d.angleFrom sharedMedian
-                    )
-            --, minLatitude =
-            --    Quantity.min
-            --        (info1 |> asRecord |> .minLatitude)
-            --        (info2 |> asRecord |> .minLatitude)
-            --, maxLatitude =
-            --    Quantity.max
-            --        (info1 |> asRecord |> .maxLatitude)
-            --        (info2 |> asRecord |> .maxLatitude)
+                    (minLongitude info1)
+                    (minLongitude info2)
+            , maxLongitude =
+                Quantity.max
+                    (maxLongitude info1)
+                    (maxLongitude info2)
             }
 
         treeBuilder : Int -> List GPXSource -> ( Maybe PeteTree, List GPXSource )
@@ -324,78 +233,80 @@ gpxDistance p1 p2 =
             ( Direction2d.toAngle p2.longitude, p2.latitude )
 
 
-nearestToLonLat :
-    GPXSource
-    -> PeteTree
-    -> Int
-nearestToLonLat click treeNode =
-    -- Only for click detect on Map view.
-    let
-        helper withNode skip =
-            case withNode of
-                Leaf leaf ->
-                    -- Use whichever point is closest.
-                    let
-                        startDistance =
-                            gpxDistance click <| Tuple.first leaf.sourceData
 
-                        endDistance =
-                            gpxDistance click <| Tuple.second leaf.sourceData
-                    in
-                    if startDistance |> Quantity.lessThanOrEqualTo endDistance then
-                        ( skip, startDistance )
-
-                    else
-                        ( skip + 1, endDistance )
-
-                Node node ->
-                    -- The trick here is effective culling, but better to search
-                    -- unnecessarily than to miss the right point.
-                    let
-                        ( inLeftSpan, inRightSpan ) =
-                            ( isLongitudeContained click.longitude node.left
-                            , isLongitudeContained click.longitude node.right
-                            )
-
-                        --_ =
-                        --    Debug.log "SPANS" ( inLeftSpan, inRightSpan )
-                    in
-                    case ( inLeftSpan, inRightSpan ) of
-                        ( True, True ) ->
-                            -- Could go either way, best check both.
-                            let
-                                ( leftBestIndex, leftBestDistance ) =
-                                    helper node.left skip
-
-                                ( rightBestIndex, rightBestDistance ) =
-                                    helper node.right (skip + skipCount node.left)
-                            in
-                            if leftBestDistance |> Quantity.lessThanOrEqualTo rightBestDistance then
-                                ( leftBestIndex, leftBestDistance )
-
-                            else
-                                ( rightBestIndex, rightBestDistance )
-
-                        ( True, False ) ->
-                            helper node.left skip
-
-                        ( False, True ) ->
-                            helper node.right (skip + skipCount node.left)
-
-                        ( False, False ) ->
-                            let
-                                ( leftDistance, rightDistance ) =
-                                    ( rotationAwayFrom click.longitude node.left
-                                    , rotationAwayFrom click.longitude node.right
-                                    )
-                            in
-                            if leftDistance |> Quantity.lessThanOrEqualTo rightDistance then
-                                helper node.left skip
-
-                            else
-                                helper node.right (skip + skipCount node.left)
-    in
-    Tuple.first <| helper treeNode 0
+--
+--nearestToLonLat :
+--    GPXSource
+--    -> PeteTree
+--    -> Int
+--nearestToLonLat click treeNode =
+--    -- Only for click detect on Map view.
+--    let
+--        helper withNode skip =
+--            case withNode of
+--                Leaf leaf ->
+--                    -- Use whichever point is closest.
+--                    let
+--                        startDistance =
+--                            gpxDistance click <| Tuple.first leaf.sourceData
+--
+--                        endDistance =
+--                            gpxDistance click <| Tuple.second leaf.sourceData
+--                    in
+--                    if startDistance |> Quantity.lessThanOrEqualTo endDistance then
+--                        ( skip, startDistance )
+--
+--                    else
+--                        ( skip + 1, endDistance )
+--
+--                Node node ->
+--                    -- The trick here is effective culling, but better to search
+--                    -- unnecessarily than to miss the right point.
+--                    let
+--                        ( inLeftSpan, inRightSpan ) =
+--                            ( isLongitudeContained click.longitude node.left
+--                            , isLongitudeContained click.longitude node.right
+--                            )
+--
+--                        --_ =
+--                        --    Debug.log "SPANS" ( inLeftSpan, inRightSpan )
+--                    in
+--                    case ( inLeftSpan, inRightSpan ) of
+--                        ( True, True ) ->
+--                            -- Could go either way, best check both.
+--                            let
+--                                ( leftBestIndex, leftBestDistance ) =
+--                                    helper node.left skip
+--
+--                                ( rightBestIndex, rightBestDistance ) =
+--                                    helper node.right (skip + skipCount node.left)
+--                            in
+--                            if leftBestDistance |> Quantity.lessThanOrEqualTo rightBestDistance then
+--                                ( leftBestIndex, leftBestDistance )
+--
+--                            else
+--                                ( rightBestIndex, rightBestDistance )
+--
+--                        ( True, False ) ->
+--                            helper node.left skip
+--
+--                        ( False, True ) ->
+--                            helper node.right (skip + skipCount node.left)
+--
+--                        ( False, False ) ->
+--                            let
+--                                ( leftDistance, rightDistance ) =
+--                                    ( rotationAwayFrom click.longitude node.left
+--                                    , rotationAwayFrom click.longitude node.right
+--                                    )
+--                            in
+--                            if leftDistance |> Quantity.lessThanOrEqualTo rightDistance then
+--                                helper node.left skip
+--
+--                            else
+--                                helper node.right (skip + skipCount node.left)
+--    in
+--    Tuple.first <| helper treeNode 0
 
 
 lngLatPair : ( Angle, Angle ) -> E.Value
