@@ -5,6 +5,7 @@ import Direction2d
 import DomainModel exposing (..)
 import Json.Encode as E
 import Length exposing (Meters)
+import Quantity
 import TrackLoaded exposing (TrackLoaded)
 
 
@@ -72,13 +73,95 @@ pointsToJSON points =
         ]
 
 
+useBounds : Float -> Float -> Float -> Float -> TrackLoaded -> E.Value
+useBounds minLon maxLon minLat maxLat track =
+    let
+        easternEdge =
+            Angle.degrees minLon
+
+        westernEdge =
+            Angle.degrees maxLon
+
+        mapLocation : GPXSource -> ( Angle, Angle )
+        mapLocation point =
+            let
+                { longitude, latitude, altitude } =
+                    point
+            in
+            ( Direction2d.toAngle longitude, latitude )
+
+        makeVisibleSegment : PeteTree -> E.Value
+        makeVisibleSegment node =
+            lngLatPair <| mapLocation <| Tuple.second <| sourceData node
+
+        --TODO: Render based on Map bounding box.
+        --NOTE: We ignore any dateline concerns here.
+        estimatedLeafCounter treeNode ( runningCount, maxDepth ) =
+            if
+                (mostWesterly treeNode |> Quantity.lessThan westernEdge)
+                    && (mostEasterly treeNode |> Quantity.greaterThan easternEdge)
+            then
+                -- It's at least partly visible
+                case treeNode of
+                    Leaf leaf ->
+                        ( runningCount + 1, maxDepth )
+
+                    Node node ->
+                        let
+                            ( leftCount, leftDepth ) =
+                                estimatedLeafCounter node.left (runningCount, maxDepth)
+
+                            ( rightCount, rightDepth ) =
+                                estimatedLeafCounter node.right (runningCount, maxDepth)
+                        in
+                        ( runningCount + leftCount + rightCount
+                        , 1 + max leftDepth rightDepth
+                        )
+
+            else
+                (runningCount, maxDepth)
+
+        ( visibleCount, visibleDepth ) =
+            estimatedLeafCounter track.trackTree ( 0, 0 )
+        
+        _ = Debug.log "INTERESTING" (visibleCount, visibleDepth)    
+            
+        renderTree : Int -> PeteTree -> List E.Value -> List E.Value
+        renderTree depth someNode accum =
+            case someNode of
+                Leaf leafNode ->
+                    makeVisibleSegment someNode :: accum
+
+                Node notLeaf ->
+                    if depth <= 0 then
+                        makeVisibleSegment someNode :: accum
+
+                    else
+                        accum
+                            |> renderTree (depth - 1) notLeaf.right
+                            |> renderTree (depth - 1) notLeaf.left
+
+        
+        
+        geometry =
+            E.object
+                [ ( "type", E.string "LineString" )
+                , ( "coordinates", E.list identity coordinates )
+                ]
+
+        coordinates =
+            renderTree 10 track.trackTree []
+    in
+    E.object
+        [ ( "type", E.string "Feature" )
+        , ( "properties", E.object [] )
+        , ( "geometry", geometry )
+        ]
+
+
 renderMapJson : TrackLoaded -> E.Value
 renderMapJson track =
     let
-        boxSide =
-            --TODO: put box side in model
-            Length.kilometers 4
-
         mapLocation : GPXSource -> ( Angle, Angle )
         mapLocation point =
             let
@@ -107,14 +190,14 @@ renderMapJson track =
                             |> renderTree (depth - 1) notLeaf.left
 
         --TODO: Render based on Map bounding box.
-
         geometry =
             E.object
                 [ ( "type", E.string "LineString" )
                 , ( "coordinates", E.list identity coordinates )
                 ]
 
-        coordinates = renderTree 10 track.trackTree []
+        coordinates =
+            renderTree 10 track.trackTree []
     in
     E.object
         [ ( "type", E.string "Feature" )

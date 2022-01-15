@@ -25,6 +25,7 @@ import MapPortController exposing (defaultMapInfo)
 import Pixels exposing (Pixels)
 import Quantity exposing (Quantity)
 import Scene3d exposing (Entity)
+import SceneBuilderMap
 import Task
 import Time
 import ToolsController exposing (ToolDock(..), ToolEntry, toolsForDock, trackInfoBox, viewTool)
@@ -471,9 +472,11 @@ performActionsOnModel actions model =
 
                 _ ->
                     mdl
+
+        finalModel =
+            List.foldl performAction model actions
     in
-    List.foldl performAction model actions
-        |> render
+    finalModel |> render
 
 
 performActionCommands : List (ToolAction Msg) -> Model -> Cmd Msg
@@ -494,6 +497,10 @@ performActionCommands actions model =
                         [ --MapPortController.addTrackToMap track
                           MapPortController.centreMapOnCurrent track
                         ]
+
+                ( SetBounds minLon maxLon minLat maxLat, Just track ) ->
+                    MapPortController.newTrackRendering <|
+                        SceneBuilderMap.useBounds minLon maxLon minLat maxLat track
 
                 _ ->
                     Cmd.none

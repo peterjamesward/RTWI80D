@@ -145,6 +145,12 @@ function mapMessageHandler(msg) {
             }
             break;
 
+        case 'Render':
+            if (isMapCreated) {
+                addLineToMap(msg.data, msg.points);
+            }
+            break;
+
         case 'Mark':
             if (isMapCreated) {
                 //console.log('adding marker');
@@ -245,21 +251,21 @@ function makeTheMap(msg) {
               }
             });
 
-            map.on('moveend', function(m) {
-              const bounds = map.getBounds();
-              console.log(bounds);
-              app.ports.mapResponses.send(
-                { 'msg' : 'bounds'
-                , 'sw' : bounds._sw
-                , 'ne' : bounds._ne
-                }
-                );
-                m;
-            });
+//           map.on('moveend', function(m) {
+//             const bounds = map.getBounds();
+//              console.log(bounds);
+//             app.ports.mapResponses.send(
+//               { 'msg' : 'bounds'
+//               , 'sw' : bounds._sw
+//               , 'ne' : bounds._ne
+//               }
+//               );
+//               m;
+//           });
 
             map.on('zoomend', function(m) {
               const bounds = map.getBounds();
-              console.log(bounds);
+//              console.log(bounds);
               app.ports.mapResponses.send(
                 { 'msg' : 'bounds'
                 , 'sw' : bounds._sw

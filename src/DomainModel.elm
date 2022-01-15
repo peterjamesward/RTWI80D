@@ -115,6 +115,18 @@ skipCount treeNode =
             node.nodeContent.skipCount
 
 
+mostEasterly treeNode =
+    medianLongitude treeNode
+        |> Direction2d.rotateBy (eastwardTurn treeNode)
+        |> Direction2d.toAngle
+
+
+mostWesterly treeNode =
+    medianLongitude treeNode
+        |> Direction2d.rotateBy (westwardTurn treeNode)
+        |> Direction2d.toAngle
+
+
 medianLongitude : PeteTree -> Direction2d LocalCoords
 medianLongitude treeNode =
     treeNode |> asRecord |> .medianLongitude
@@ -145,7 +157,6 @@ makeRoadSection reference earth1 earth2 =
             earth1.longitude
                 |> Direction2d.rotateBy
                     (Direction2d.angleFrom earth1.longitude earth2.longitude |> Quantity.half)
-
     in
     { sourceData = ( earth1, earth2 )
     , trueLength = range

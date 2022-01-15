@@ -90,6 +90,17 @@ addTrackToMap track =
             , ( "points", E.null ) --trackPointsToJSON track ) -- Make track points draggable
             ]
 
+newTrackRendering : E.Value -> Cmd msg
+newTrackRendering data =
+    -- Selective rendering requires us to redraw.
+    mapCommands <|
+        E.object
+            [ ( "Cmd", E.string "Render" )
+            , ( "token", E.string mapboxKey )
+            , ( "data", data ) -- Route as polyline
+            , ( "points", E.null ) -- Not used but required
+            ]
+
 
 showPreview : String -> String -> String -> E.Value -> Cmd msg
 showPreview tag shape colour geoJson =
